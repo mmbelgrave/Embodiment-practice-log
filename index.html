@@ -82,6 +82,8 @@
   button.link:hover { color: var(--error); background: rgba(179, 65, 58, 0.08); }
   .status { margin-left: 12px; font-size: 14px; font-weight: 500; color: var(--success); overflow-wrap: anywhere; }
   .status.error { color: var(--error); font-weight: 600; }
+  .status.block { display: block; margin: 12px 0 0; }
+  .help { margin: 0 0 16px; color: var(--muted); font-size: 15px; }
   .item { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--rule); }
   .item:first-child { border-top: 0; }
   .item-main { flex: 1; min-width: 0; }
@@ -119,8 +121,13 @@
   .warn strong { color: var(--black); }
   [hidden] { display: none !important; }
   @media (max-width: 480px) {
+    nav button { padding: 0 10px; }
     .bar-name { flex-basis: 40%; }
     .item { flex-wrap: wrap; }
+  }
+  @media (max-width: 360px) {
+    nav { gap: 2px; }
+    nav button { min-width: 44px; padding: 0 8px; }
   }
 </style>
 </head>
@@ -128,7 +135,7 @@
 <div class="wrap">
   <header>
     <h1>Embodiment Practice Log</h1>
-    <p>Saved in this browser on this computer only.</p>
+    <p>Saved only in this browser. To use another device, export and import on the Data tab.</p>
   </header>
 
   <div class="warn" id="storage-warning" role="alert" hidden></div>
@@ -137,6 +144,7 @@
     <button type="button" data-view="log" aria-current="true">Log</button>
     <button type="button" data-view="practices" aria-current="false">Practices</button>
     <button type="button" data-view="dashboard" aria-current="false">Dashboard</button>
+    <button type="button" data-view="data" aria-current="false">Data</button>
   </nav>
 
   <section id="view-log">
@@ -150,7 +158,7 @@
           </div>
           <div class="field">
             <label for="session-date">Date</label>
-            <input type="date" id="session-date" required>
+            <input type="date" id="session-date" min="1900-01-01" max="2100-12-31" required>
           </div>
         </div>
         <fieldset class="field">
@@ -217,6 +225,24 @@
       </div>
     </div>
   </section>
+
+  <section id="view-data" hidden>
+    <div class="card">
+      <h2>Export your log</h2>
+      <p class="help">Downloads one file with all your practices, sessions and notes. Keep it as a backup, or move it to another device and import it there.</p>
+      <p class="help" id="export-empty" hidden>Available once you have added a practice.</p>
+      <button type="button" class="primary" id="export-button">Export</button>
+      <span class="status block" id="export-status" role="status"></span>
+    </div>
+    <div class="card">
+      <h2>Import a log file</h2>
+      <p class="help">Adds the entries from an export file to this browser. Nothing already here is replaced or deleted, and entries you already have are skipped.</p>
+      <p class="help">A session or practice you deleted here comes back, with its sessions, if the file you import still contains it.</p>
+      <input type="file" id="import-file" hidden>
+      <button type="button" class="primary" id="import-button">Choose file to import</button>
+      <span class="status block" id="import-status" role="status"></span>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -225,6 +251,8 @@
 
   var STORAGE_KEY = 'embodiment-practice-log-v1';
   var PARTS = ['morning', 'afternoon', 'evening'];
+  var MIN_YEAR = 1900;
+  var MAX_YEAR = 2100;
 
   var WARNINGS = {
     unreadable: 'Your saved data could not be read, so the app has stopped saving to avoid ' +
@@ -300,17 +328,28 @@
   // Built from local date parts: toISOString() converts to UTC and can land on the wrong day.
   function isoDate(d) {
     var pad = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    return String(d.getFullYear()).padStart(4, '0') + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
+  // setFullYear because new Date(y, m, d) silently maps years 0-99 to 1900-1999.
   function parseISO(s) {
     var p = s.split('-');
-    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var d = new Date(2000, 0, 1);
+    d.setFullYear(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return d;
+  }
+
+  function isLoggableDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || isoDate(parseISO(value)) !== value) return false;
+    var year = Number(value.slice(0, 4));
+    return year >= MIN_YEAR && year <= MAX_YEAR;
   }
 
   function formatDate(iso) {
     var today = isoDate(new Date());
     if (iso === today) return 'Today';
+    var year = parseISO(iso).getFullYear();
+    if (year < MIN_YEAR || year > MAX_YEAR) return iso;
     var yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (iso === isoDate(yesterday)) return 'Yesterday';
@@ -343,11 +382,15 @@
     });
   }
 
-  function flash(node, message, isError) {
+  function flash(node, message, isError, sticky) {
     clearTimeout(node.flashTimer);
     node.textContent = message;
     node.classList.toggle('error', Boolean(isError));
-    if (!isError) node.flashTimer = setTimeout(function () { node.textContent = ''; }, 2500);
+    if (!isError && !sticky) node.flashTimer = setTimeout(function () { node.textContent = ''; }, 2500);
+  }
+
+  function plural(count, word) {
+    return count + ' ' + word + (count === 1 ? '' : 's');
   }
 
   function renderPracticeSelect() {
@@ -505,12 +548,208 @@
   var renderedDay = '';
   var autoFilledDate = '';
 
+  function renderDataTab() {
+    var empty = !state.practices.length;
+    document.getElementById('export-button').disabled = locked || empty;
+    document.getElementById('export-empty').hidden = locked || !empty;
+    document.getElementById('import-button').disabled = locked;
+  }
+
   function render() {
     renderedDay = isoDate(new Date());
     renderPracticeSelect();
     renderSessions();
     renderPractices();
     renderDashboard();
+    renderDataTab();
+  }
+
+  var EXPORT_APP = 'embodiment-practice-log';
+  var EXPORT_FORMAT = 1;
+  var MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+  var NOT_AN_EXPORT = 'This file is not an export from Embodiment Practice Log, so nothing was imported.';
+
+  function cleanName(name) {
+    return name.trim().replace(/\s+/g, ' ');
+  }
+
+  // Names that only differ in capitals, spacing or straight/curly quotes count as the same practice.
+  function nameKey(name) {
+    return cleanName(name.normalize('NFKC'))
+      .replace(/[‘’‚‛′]/g, "'")
+      .replace(/[“”„‟″]/g, '"')
+      .toLowerCase();
+  }
+
+  function shortText(value) {
+    var text = String(value);
+    return text.length > 40 ? text.slice(0, 40) + '…' : text;
+  }
+
+  // Lookup table without inherited keys, so names like "constructor" can't match by accident.
+  function lookup() {
+    return Object.create(null);
+  }
+
+  function isNonEmptyString(value) {
+    return typeof value === 'string' && value.trim() !== '';
+  }
+
+  // Wider than isLoggableDate: older versions could save any year the date field allowed.
+  function isValidDate(value) {
+    return typeof value === 'string' && /^\d{4,6}-\d{2}-\d{2}$/.test(value) && isoDate(parseISO(value)) === value;
+  }
+
+  // Validates a whole export file; returns clean copies of its entries, or an error message.
+  function parseExport(text) {
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      return NOT_AN_EXPORT;
+    }
+    if (!data || data.app !== EXPORT_APP || !Array.isArray(data.practices) || !Array.isArray(data.sessions)) {
+      return NOT_AN_EXPORT;
+    }
+    if (data.format !== EXPORT_FORMAT) {
+      return 'This export file uses a format this version of the app does not recognise, so nothing was imported.';
+    }
+    var practiceIds = lookup();
+    var practices = [];
+    for (var i = 0; i < data.practices.length; i++) {
+      var p = data.practices[i];
+      if (!p || !isNonEmptyString(p.id) || practiceIds[p.id] || !isNonEmptyString(p.name) ||
+          cleanName(p.name).length > 60 || !Number.isFinite(p.createdAt)) {
+        var practiceLabel = p && typeof p.name === 'string' && p.name.trim() ? '"' + shortText(p.name.trim()) + '"' : 'number ' + (i + 1);
+        return 'Nothing was imported: practice ' + practiceLabel + ' in this file is damaged or was edited.';
+      }
+      practiceIds[p.id] = cleanName(p.name);
+      practices.push({ id: p.id, name: cleanName(p.name), createdAt: p.createdAt });
+    }
+    var sessionIds = lookup();
+    var sessions = [];
+    for (var j = 0; j < data.sessions.length; j++) {
+      var s = data.sessions[j];
+      if (!s || !isNonEmptyString(s.id) || sessionIds[s.id] || !practiceIds[s.practiceId] ||
+          !isValidDate(s.date) || PARTS.indexOf(s.part) === -1 || typeof s.notes !== 'string' ||
+          !Number.isFinite(s.createdAt)) {
+        var sessionLabel = 'number ' + (j + 1);
+        if (s && typeof s.date === 'string') sessionLabel += ' (dated ' + shortText(s.date) + ')';
+        if (s && practiceIds[s.practiceId]) sessionLabel += ' for "' + shortText(practiceIds[s.practiceId]) + '"';
+        return 'Nothing was imported: session ' + sessionLabel + ' in this file is damaged or was edited.';
+      }
+      sessionIds[s.id] = true;
+      sessions.push({ id: s.id, practiceId: s.practiceId, date: s.date, part: s.part, notes: s.notes, createdAt: s.createdAt });
+    }
+    return { practices: practices, sessions: sessions };
+  }
+
+  // Merges into state: practices match by name, sessions by ID. Only adds, never removes.
+  function mergeImport(incoming) {
+    var summary = { practicesAdded: 0, practicesMatched: 0, sessionsAdded: 0, sessionsSkipped: 0 };
+    var idByName = lookup();
+    var usedPracticeIds = lookup();
+    state.practices.forEach(function (p) {
+      idByName[nameKey(p.name)] = p.id;
+      usedPracticeIds[p.id] = true;
+    });
+    var practiceIdMap = lookup();
+    incoming.practices.forEach(function (p) {
+      var existingId = idByName[nameKey(p.name)];
+      if (existingId) {
+        practiceIdMap[p.id] = existingId;
+        summary.practicesMatched++;
+        return;
+      }
+      var newId = usedPracticeIds[p.id] ? id() : p.id;
+      state.practices.push({ id: newId, name: p.name, createdAt: p.createdAt });
+      idByName[nameKey(p.name)] = newId;
+      usedPracticeIds[newId] = true;
+      practiceIdMap[p.id] = newId;
+      summary.practicesAdded++;
+    });
+    var knownSessionIds = lookup();
+    state.sessions.forEach(function (s) { knownSessionIds[s.id] = true; });
+    incoming.sessions.forEach(function (s) {
+      if (knownSessionIds[s.id]) {
+        summary.sessionsSkipped++;
+        return;
+      }
+      state.sessions.push({
+        id: s.id, practiceId: practiceIdMap[s.practiceId], date: s.date, part: s.part, notes: s.notes, createdAt: s.createdAt
+      });
+      knownSessionIds[s.id] = true;
+      summary.sessionsAdded++;
+    });
+    return summary;
+  }
+
+  function describeImport(summary) {
+    var text = 'Imported ' + plural(summary.practicesAdded, 'new practice') + ' and ' +
+      plural(summary.sessionsAdded, 'session') + '.';
+    if (summary.practicesMatched) {
+      text += ' ' + plural(summary.practicesMatched, 'practice') + ' matched one you already had.';
+    }
+    if (summary.sessionsSkipped) {
+      text += ' ' + plural(summary.sessionsSkipped, 'session') + (summary.sessionsSkipped === 1 ? ' was' : ' were') +
+        ' already here and skipped.';
+    }
+    return text;
+  }
+
+  function exportLog() {
+    var status = document.getElementById('export-status');
+    if (!refresh()) {
+      render();
+      return;
+    }
+    render();
+    if (!state.practices.length) return;
+    var payload = {
+      app: EXPORT_APP,
+      format: EXPORT_FORMAT,
+      exportedAt: new Date().toISOString(),
+      practices: state.practices,
+      sessions: state.sessions
+    };
+    var url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    var link = el('a', { href: url, download: 'embodiment-log-' + isoDate(new Date()) + '.json' });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    // Revoked later: some browsers (notably Safari) start the download after click() returns.
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    // The export must import cleanly; if it wouldn't, say which entry blocks it rather than hand over a dud backup.
+    var selfCheck = parseExport(JSON.stringify(payload));
+    if (typeof selfCheck === 'string') {
+      var problem = selfCheck.replace('Nothing was imported: ', '').replace(' in this file is damaged or was edited.', ' is not valid.');
+      flash(status, 'The file was downloaded, but it could not be imported as it is. Problem: ' + problem +
+        ' Delete or re-log that entry and export again.', true);
+      return;
+    }
+    flash(status, 'Exported ' + plural(state.practices.length, 'practice') + ' and ' +
+      plural(state.sessions.length, 'session') + '. If no file appeared, your browser may have blocked the download.', false, true);
+  }
+
+  function importText(text) {
+    var status = document.getElementById('import-status');
+    var incoming = parseExport(text);
+    if (typeof incoming === 'string') {
+      flash(status, incoming, true);
+      return;
+    }
+    var summary;
+    var result = update(function () {
+      summary = mergeImport(incoming);
+      if (!summary.practicesAdded && !summary.sessionsAdded) return false;
+    });
+    if (result === 'saved') {
+      flash(status, describeImport(summary), false, true);
+    } else if (result === 'cancelled') {
+      flash(status, 'Nothing new to import: everything in this file is already here.', false, true);
+    } else {
+      flash(status, 'Not imported. See the warning at the top of the page.', true);
+    }
   }
 
   // Moves the date field to the new day after midnight, unless the user picked a date themselves.
@@ -527,7 +766,7 @@
       document.querySelectorAll('nav button').forEach(function (b) {
         b.setAttribute('aria-current', String(b === button));
       });
-      ['log', 'practices', 'dashboard'].forEach(function (view) {
+      ['log', 'practices', 'dashboard', 'data'].forEach(function (view) {
         document.getElementById('view-' + view).hidden = view !== button.dataset.view;
       });
     });
@@ -537,10 +776,10 @@
     event.preventDefault();
     var input = document.getElementById('practice-name');
     var status = document.getElementById('practice-status');
-    var name = input.value.trim();
+    var name = cleanName(input.value);
     if (!name) return;
     var result = update(function () {
-      var duplicate = state.practices.some(function (p) { return p.name.toLowerCase() === name.toLowerCase(); });
+      var duplicate = state.practices.some(function (p) { return nameKey(p.name) === nameKey(name); });
       if (duplicate) return false;
       state.practices.push({ id: id(), name: name, createdAt: Date.now() });
     });
@@ -561,6 +800,11 @@
     var practiceId = document.getElementById('session-practice').value;
     var date = document.getElementById('session-date').value;
     if (!practiceId || !date) return;
+    // Some browsers don't enforce the input's min/max, so the year range is checked here too.
+    if (!isLoggableDate(date)) {
+      flash(status, 'Check the date: the year must be between ' + MIN_YEAR + ' and ' + MAX_YEAR + '. Nothing was saved.', true);
+      return;
+    }
     var result = update(function () {
       if (!state.practices.some(function (p) { return p.id === practiceId; })) return false;
       state.sessions.push({
@@ -580,6 +824,28 @@
     } else {
       flash(status, 'Not saved. See the warning at the top of the page.', true);
     }
+  });
+
+  document.getElementById('export-button').addEventListener('click', exportLog);
+
+  document.getElementById('import-button').addEventListener('click', function () {
+    document.getElementById('import-file').click();
+  });
+
+  document.getElementById('import-file').addEventListener('change', function (event) {
+    var input = event.target;
+    var file = input.files[0];
+    var status = document.getElementById('import-status');
+    input.value = '';
+    if (!file) return;
+    if (file.size > MAX_IMPORT_BYTES) {
+      flash(status, NOT_AN_EXPORT, true);
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () { importText(String(reader.result)); };
+    reader.onerror = function () { flash(status, 'The file could not be read, so nothing was imported.', true); };
+    reader.readAsText(file);
   });
 
   window.addEventListener('storage', function (event) {
