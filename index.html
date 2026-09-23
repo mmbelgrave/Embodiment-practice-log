@@ -25,6 +25,8 @@
     --sans: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
   * { box-sizing: border-box; }
+  /* Always reserve the scrollbar so short and long tabs have the same width. */
+  html { scrollbar-gutter: stable; }
   body {
     margin: 0;
     background: var(--sand);
@@ -37,9 +39,11 @@
   nav { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-bottom: 24px; flex-wrap: wrap; }
   nav button {
     appearance: none; background: none; border: 0; border-bottom: 2px solid transparent;
-    min-height: 44px; padding: 0 14px; font: inherit; font-weight: 500; color: var(--muted);
+    min-height: 44px; min-width: 44px; padding: 0 14px; font: inherit; font-weight: 500; color: var(--muted);
     cursor: pointer; margin-bottom: -1px;
+    display: inline-flex; align-items: center; justify-content: center;
   }
+  nav button.icon-tab svg { display: block; }
   nav button:hover { color: var(--indigo); }
   nav button[aria-current="true"] { color: var(--indigo); border-bottom-color: var(--indigo); font-weight: 600; }
   .card { background: var(--white); border: 1px solid var(--rule); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
@@ -108,7 +112,16 @@
   .bar-fill { background: var(--indigo); height: 100%; border-radius: 3px; min-width: 2px; }
   .bar-count { flex: 0 0 auto; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
   .days { display: flex; gap: 4px; flex-wrap: wrap; }
-  .day { width: 26px; height: 26px; border-radius: 3px; border: 1px solid var(--rule); background: var(--white); }
+  .day { width: 26px; height: 26px; padding: 0; border-radius: 3px; border: 1px solid var(--rule); background: var(--white); }
+  button.day { cursor: pointer; }
+  button.day:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+  button.day[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--indigo); }
+  .day-detail { margin: 12px 0 0; font-size: 14px; font-weight: 500; color: var(--indigo); min-height: 1.4em; }
+  /* On touch screens the day squares are real tap targets; a mouse keeps the compact grid. */
+  @media (pointer: coarse) {
+    button.day { width: 44px; height: 44px; }
+    .legend button.day, .legend .day { width: 16px; height: 16px; }
+  }
   .day.l1 { background: var(--viz-1); border-color: var(--viz-1); }
   .day.l2 { background: var(--viz-2); border-color: var(--viz-2); }
   .day.l3 { background: var(--viz-3); border-color: var(--viz-3); }
@@ -119,15 +132,19 @@
     color: var(--black); padding: 12px 16px; font-size: 15px; margin-bottom: 20px;
   }
   .warn strong { color: var(--black); }
+  footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--rule); text-align: center; }
+  footer p { margin: 0; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .home-steps { margin: 0 0 4px; padding-left: 20px; }
+  .home-steps li { margin-bottom: 8px; }
   [hidden] { display: none !important; }
   @media (max-width: 480px) {
-    nav button { padding: 0 10px; }
+    nav { gap: 2px; }
+    nav button { padding: 0 8px; }
     .bar-name { flex-basis: 40%; }
     .item { flex-wrap: wrap; }
   }
   @media (max-width: 360px) {
-    nav { gap: 2px; }
-    nav button { min-width: 44px; padding: 0 8px; }
+    nav button { padding: 0 6px; }
   }
 </style>
 </head>
@@ -141,11 +158,42 @@
   <div class="warn" id="storage-warning" role="alert" hidden></div>
 
   <nav>
+    <button type="button" class="icon-tab" data-view="home" aria-current="false" aria-label="Home" title="Home">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none"
+           stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3.5 11.3 12 4.4l8.5 6.9"/>
+        <path d="M6 10.6v8.9h12v-8.9"/>
+      </svg>
+    </button>
     <button type="button" data-view="log" aria-current="true">Log</button>
     <button type="button" data-view="practices" aria-current="false">Practices</button>
     <button type="button" data-view="dashboard" aria-current="false">Dashboard</button>
     <button type="button" data-view="data" aria-current="false">Data</button>
   </nav>
+
+  <section id="view-home" hidden>
+    <div class="card">
+      <h2>Your practice, written down</h2>
+      <p class="help">A private log for your embodiment practices — yoga, meditation, breathwork, or anything else you add. It keeps a simple record of what you did, when, and how it felt.</p>
+    </div>
+    <div class="card">
+      <h2>How to use it</h2>
+      <ol class="home-steps">
+        <li><strong>Practices</strong> — add the practices you do, by name.</li>
+        <li><strong>Log</strong> — pick a practice, the day, and the part of the day. Add notes on what was present: feelings, sensations, whatever you want to remember. Notes are optional.</li>
+        <li><strong>Dashboard</strong> — see how often you practise, how your sessions spread across morning, afternoon and evening, and what the last 30 days look like.</li>
+        <li><strong>Data</strong> — download a backup, or move your log to another device.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Where your log lives</h2>
+      <p class="help">Everything stays in the browser you are using. Nothing is sent anywhere and nobody else can read it. That also means your phone and your computer each keep their own log, so use Export and Import on the Data tab to move entries across and to keep a backup.</p>
+    </div>
+    <div class="card">
+      <h2>About SabiFasi</h2>
+      <p class="help">This app is a SabiFasi product. SabiFasi turns practical expertise into better decisions and usable action: understand what matters, pressure-test the thinking, move with a plan. The name brings together two words from Sranan Tongo — <em>sabi</em> (to know) and <em>fasi</em> (a way of doing something). Knowing, made usable.</p>
+    </div>
+  </section>
 
   <section id="view-log">
     <div class="card">
@@ -218,6 +266,7 @@
     <div class="card">
       <h3>Last 30 days</h3>
       <div class="days" id="dash-days"></div>
+      <p class="day-detail" id="day-detail" role="status"></p>
       <div class="legend">
         <span>None</span>
         <span class="day"></span><span class="day l1"></span><span class="day l2"></span><span class="day l3"></span>
@@ -243,6 +292,10 @@
       <span class="status block" id="import-status" role="status"></span>
     </div>
   </section>
+
+  <footer>
+    <p>A SabiFasi product · © <span id="footer-year">2026</span> SabiFasi · Knowing, made usable.</p>
+  </footer>
 </div>
 
 <script>
@@ -373,6 +426,14 @@
     return found ? found.name : 'Removed practice';
   }
 
+  function byName(a, b) {
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  }
+
+  function sortedPractices() {
+    return state.practices.slice().sort(byName);
+  }
+
   function sortedSessions() {
     var order = { evening: 2, afternoon: 1, morning: 0 };
     return state.sessions.slice().sort(function (a, b) {
@@ -406,7 +467,7 @@
     }
     select.disabled = false;
     document.getElementById('session-submit').disabled = locked;
-    state.practices.forEach(function (p) {
+    sortedPractices().forEach(function (p) {
       select.append(el('option', { value: p.id, text: p.name }));
     });
     if (previous && state.practices.some(function (p) { return p.id === previous; })) select.value = previous;
@@ -454,7 +515,7 @@
     function sessionCount(practiceId) {
       return state.sessions.filter(function (s) { return s.practiceId === practiceId; }).length;
     }
-    state.practices.forEach(function (p) {
+    sortedPractices().forEach(function (p) {
       var count = sessionCount(p.id);
       var main = el('div', { class: 'item-main' }, [
         el('div', { class: 'item-title', text: p.name }),
@@ -515,7 +576,7 @@
     } else {
       var counts = state.practices.map(function (p) {
         return { name: p.name, count: state.sessions.filter(function (s) { return s.practiceId === p.id; }).length };
-      }).sort(function (a, b) { return b.count - a.count; });
+      }).sort(function (a, b) { return b.count - a.count || byName(a, b); });
       var maxCount = Math.max.apply(null, counts.map(function (c) { return c.count; }).concat([1]));
       counts.forEach(function (c) { perPractice.append(barRow(c.name, c.count, maxCount)); });
     }
@@ -531,22 +592,39 @@
     });
 
     var strip = document.getElementById('dash-days');
+    var detail = document.getElementById('day-detail');
     strip.textContent = '';
+    detail.textContent = '';
+    var makeDay = function (iso, count) {
+      var label = formatDate(iso) + ' — ' + (count === 0 ? 'no sessions' : count === 1 ? '1 session' : count + ' sessions');
+      var level = count === 0 ? '' : count === 1 ? ' l1' : count === 2 ? ' l2' : ' l3';
+      var cell = el('button', { class: 'day' + level, type: 'button', title: label, 'aria-label': label, 'aria-pressed': 'false' });
+      // A day stays selected across re-renders, so another tab saving does not clear what you are reading.
+      if (iso === selectedDay) {
+        cell.setAttribute('aria-pressed', 'true');
+        detail.textContent = label;
+      }
+      // Tap or click shows the day below the grid: hover text alone is unusable on a touch screen.
+      cell.addEventListener('click', function () {
+        var alreadyShown = cell.getAttribute('aria-pressed') === 'true';
+        strip.querySelectorAll('button.day').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+        cell.setAttribute('aria-pressed', alreadyShown ? 'false' : 'true');
+        selectedDay = alreadyShown ? '' : iso;
+        detail.textContent = alreadyShown ? '' : label;
+      });
+      return cell;
+    };
     for (var i = 29; i >= 0; i--) {
       var d = new Date();
       d.setDate(d.getDate() - i);
       var iso = isoDate(d);
-      var count = days[iso] || 0;
-      var level = count === 0 ? '' : count === 1 ? ' l1' : count === 2 ? ' l2' : ' l3';
-      strip.append(el('div', {
-        class: 'day' + level,
-        title: formatDate(iso) + ' — ' + (count === 1 ? '1 session' : count + ' sessions')
-      }));
+      strip.append(makeDay(iso, days[iso] || 0));
     }
   }
 
   var renderedDay = '';
   var autoFilledDate = '';
+  var selectedDay = '';
 
   function renderDataTab() {
     var empty = !state.practices.length;
@@ -761,15 +839,19 @@
     if (renderedDay !== today) render();
   }
 
-  document.querySelectorAll('nav button').forEach(function (button) {
-    button.addEventListener('click', function () {
-      document.querySelectorAll('nav button').forEach(function (b) {
-        b.setAttribute('aria-current', String(b === button));
-      });
-      ['log', 'practices', 'dashboard', 'data'].forEach(function (view) {
-        document.getElementById('view-' + view).hidden = view !== button.dataset.view;
-      });
+  var VIEWS = ['home', 'log', 'practices', 'dashboard', 'data'];
+
+  function showView(view) {
+    document.querySelectorAll('nav button').forEach(function (b) {
+      b.setAttribute('aria-current', String(b.dataset.view === view));
     });
+    VIEWS.forEach(function (v) {
+      document.getElementById('view-' + v).hidden = v !== view;
+    });
+  }
+
+  document.querySelectorAll('nav button').forEach(function (button) {
+    button.addEventListener('click', function () { showView(button.dataset.view); });
   });
 
   document.getElementById('practice-form').addEventListener('submit', function (event) {
@@ -857,9 +939,13 @@
   window.addEventListener('focus', syncToToday);
   setInterval(syncToToday, 60000);
 
+  document.getElementById('footer-year').textContent = String(new Date().getFullYear());
+
   refresh();
   render();
   syncToToday();
+  // First visit (nothing logged yet) opens Home; afterwards the app opens where the work is.
+  showView(!state.practices.length && !state.sessions.length ? 'home' : 'log');
 })();
 </script>
 </body>
