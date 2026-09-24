@@ -50,9 +50,17 @@
   h2, h3 { font-size: 18px; line-height: 1.3; margin: 0 0 16px; font-weight: 500; color: var(--indigo); }
   label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
   input[type="text"], input[type="date"], select, textarea {
-    width: 100%; min-height: 44px; padding: 9px 12px; font: inherit; color: var(--black);
+    width: 100%; max-width: 100%; min-width: 0; min-height: 44px; padding: 9px 12px;
+    font: inherit; color: var(--black);
     background: var(--white); border: 1px solid var(--field-border); border-radius: 6px;
   }
+  /* iOS Safari sizes date fields from their own controls and overflows the card unless
+     the native appearance is switched off; text stays left-aligned like the other fields. */
+  input[type="date"] {
+    -webkit-appearance: none; appearance: none; text-align: left;
+    height: 44px; padding-block: 0;
+  }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   textarea { resize: vertical; min-height: 88px; }
   input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
     outline: 2px solid var(--indigo); outline-offset: 2px;
@@ -62,7 +70,7 @@
   fieldset.field { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
   fieldset.field legend { padding: 0; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .row > .field { flex: 1 1 200px; }
+  .row > .field { flex: 1 1 200px; min-width: 0; }
   .parts { display: flex; gap: 8px; }
   .parts label {
     flex: 1 1 0; min-width: 0; min-height: 44px; margin: 0; padding: 0 6px;
